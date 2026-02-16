@@ -1,0 +1,21 @@
+name: CI
+
+on:
+  push: {}
+  pull_request: {}
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run build
+        run: bash ci-scripts/build.sh
+
+      - name: Run tests
+        run: bash ci-scripts/test.sh
+
+      - name: Deploy (idempotent)
+        run: bash ci-scripts/deploy.sh
