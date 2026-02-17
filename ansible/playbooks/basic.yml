@@ -1,0 +1,41 @@
+---
+name: Basic system tasks (package install + file creation)
+hosts: web
+become: yes
+vars:
+  demo_file: /etc/myapp/demo.txt
+
+tasks:
+  - name: Update apt cache (Debian/Ubuntu)
+    apt:
+      update_cache: yes
+      cache_valid_time: 3600
+    when: ansible_facts['pkg_mgr'] == 'apt'
+
+  - name: Ensure `htop` is installed
+    package:
+      name: htop
+      state: present
+
+  - name: Ensure demo directory exists
+    file:
+      path: "{{ demo_file | dirname }}"
+      state: directory
+      owner: root
+      group: root
+      mode: '0755'
+
+  - name: Create demo file with stable content (idempotent)
+    copy:
+      dest: "{{ demo_file }}"
+      content: |
+        Managed by Ansible
+      owner: root
+      group: root
+      mode: '0644'
+    notify: report-demo
+
+handlers:
+  - name: report-demo
+    debug:
+      msg: "Demo file ensured at {{ demo_file }}"
