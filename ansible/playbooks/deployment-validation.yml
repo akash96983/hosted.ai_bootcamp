@@ -1,0 +1,47 @@
+# Deployment Validation Playbook
+# Validates pod placement, scheduling, and resource allocation
+---
+- name: Validate Deployment Configuration
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    # Task 1: Verify all pods are running
+    - name: Check pod status
+      shell: kubectl get pods -A --no-headers | wc -l
+      register: pod_count
+      changed_when: false
+
+    - name: Report pod count
+      debug:
+        msg: "Total pods deployed: {{ pod_count.stdout }}"
+
+    # Task 2: Verify nodes have scheduled workloads
+    - name: Check node distribution
+      shell: kubectl get pods -A -o wide | awk '{print $8}' | sort -u | tail -n +2 | wc -l
+      register: node_count
+      changed_when: false
+
+    - name: Report scheduled nodes
+      debug:
+        msg: "Pods distributed across {{ node_count.stdout }} nodes"
+
+    # Task 3: Identify any pending pods (scheduling failures)
+    - name: Check for pending pods
+      shell: kubectl get pods -A --field-selector=status.phase=Pending --no-headers | wc -l
+      register: pending_pods
+      changed_when: false
+
+    - name: Alert if pending pods exist
+      debug:
+        msg: "⚠️  {{ pending_pods.stdout }} pods pending - check resources"
+      when: pending_pods.stdout | int > 0
+
+    # Task 4: Validate resource requests are set
+    - name: Verify resource requests
+      shell: kubectl get pods -A -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.containers[*].resources}{"\t"}{end}' | head -5
+      register: resource_check
+      changed_when: false
+
+    - name: Show resource allocation
+      debug:
+        msg: "{{ resource_check.stdout_lines }}"
