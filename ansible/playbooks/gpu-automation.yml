@@ -1,0 +1,55 @@
+# GPU Automation Playbook
+# Configures GPU nodes, validates drivers, manages resource allocation
+---
+- name: GPU-Aware Automation
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    # Task 1: Detect GPU-capable nodes
+    - name: Find nodes with GPU
+      shell: kubectl get nodes -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.status.allocatable.nvidia\.com/gpu}{"\n"}{end}'
+      register: gpu_nodes
+      changed_when: false
+
+    - name: Report GPU availability
+      debug:
+        msg: "{{ gpu_nodes.stdout_lines }}"
+
+    # Task 2: Label GPU nodes for scheduling
+    - name: Extract GPU node names
+      set_fact:
+        gpu_node_list: "{{ gpu_nodes.stdout_lines | map('split', '\t') | selectattr('1', 'defined') | map(attribute='0') | list }}"
+
+    - name: Label GPU nodes
+      shell: "kubectl label nodes {{ item }} gpu-node=true --overwrite"
+      loop: "{{ gpu_node_list }}"
+      when: item and item != ""
+      changed_when: true
+
+    # Task 3: Validate GPU driver (device plugin running)
+    - name: Check GPU device plugin
+      shell: kubectl get pods -n kube-system -l k8s-app=nvidia-device-plugin --no-headers | wc -l
+      register: gpu_plugin
+      changed_when: false
+
+    - name: Report driver status
+      debug:
+        msg: "GPU device plugin pods running: {{ gpu_plugin.stdout }}"
+
+    # Task 4: Conditional - Set up resource quota if GPUs exist
+    - name: Setup GPU quota (if GPUs detected)
+      block:
+        - name: Create GPU resource quota
+          shell: |
+            cat << EOF | kubectl apply -f -
+            apiVersion: v1
+            kind: ResourceQuota
+            metadata:
+              name: gpu-quota
+              namespace: default
+            spec:
+              hard:
+                requests.nvidia.com/gpu: "4"
+            EOF
+      when: gpu_node_list | length > 0
+      ignore_errors: yes
