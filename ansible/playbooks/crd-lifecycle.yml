@@ -1,0 +1,114 @@
+# Task 82 & 83: CRD Design and Lifecycle Automation Playbook
+# Applies CRD, validates schema, and manages custom resources
+---
+- name: CRD Lifecycle Automation
+  hosts: localhost
+  gather_facts: no
+  vars:
+    crd_name: websiteconfigs.bootcamp.io
+    custom_resource_name: example-website
+  
+  tasks:
+    # Step 1: Check if CRD exists
+    - name: Check existing CRD
+      shell: "kubectl get crd {{ crd_name }} 2>/dev/null && echo 'EXISTS' || echo 'NOTFOUND'"
+      register: crd_status
+      changed_when: false
+      ignore_errors: yes
+
+    - name: CRD status
+      debug:
+        msg: "CRD {{ crd_name }}: {{ crd_status.stdout }}"
+
+    # Step 2: Apply CRD manifest
+    - name: Apply CRD manifest
+      block:
+        - name: Create CRD from file or inline
+          shell: |
+            cat << 'EOF' | kubectl apply -f -
+            apiVersion: apiextensions.k8s.io/v1
+            kind: CustomResourceDefinition
+            metadata:
+              name: websiteconfigs.bootcamp.io
+            spec:
+              group: bootcamp.io
+              names:
+                kind: WebsiteConfig
+                plural: websiteconfigs
+              scope: Namespaced
+              versions:
+                - name: v1
+                  served: true
+                  storage: true
+                  schema:
+                    openAPIV3Schema:
+                      type: object
+                      properties:
+                        spec:
+                          type: object
+                          properties:
+                            domain:
+                              type: string
+                            replicas:
+                              type: integer
+                              minimum: 1
+                              maximum: 10
+            EOF
+          changed_when: true
+
+    # Step 3: Validate CRD installed
+    - name: Verify CRD registration
+      shell: "kubectl get crd {{ crd_name }} -o jsonpath='{.spec.versions[*].name}'"
+      register: crd_versions
+      changed_when: false
+
+    - name: Display CRD versions
+      debug:
+        msg: "CRD versions: {{ crd_versions.stdout }}"
+
+    # Step 4: Create custom resource instance
+    - name: Create WebsiteConfig instance
+      shell: |
+        cat << EOF | kubectl apply -f -
+        apiVersion: bootcamp.io/v1
+        kind: WebsiteConfig
+        metadata:
+          name: {{ custom_resource_name }}
+          namespace: default
+        spec:
+          domain: example.com
+          replicas: 3
+        EOF
+      changed_when: true
+
+    # Step 5: Verify custom resource
+    - name: Check custom resource
+      shell: "kubectl get websiteconfig {{ custom_resource_name }} -o wide"
+      register: custom_resource
+      changed_when: false
+
+    - name: Show custom resource
+      debug:
+        msg: "{{ custom_resource.stdout_lines }}"
+
+    # Step 6: Test schema validation
+    - name: Test schema validation
+      block:
+        - name: Invalid resource test (replicas > 10)
+          shell: |
+            cat << EOF | kubectl apply -f - 2>&1
+            apiVersion: bootcamp.io/v1
+            kind: WebsiteConfig
+            metadata:
+              name: invalid-test
+            spec:
+              domain: test.com
+              replicas: 15
+            EOF
+          register: validation_test
+          failed_when: false
+          changed_when: false
+
+        - name: Show validation result
+          debug:
+            msg: "Schema validation working: {{ validation_test.stderr | regex_search('error|invalid') is not none }}"
