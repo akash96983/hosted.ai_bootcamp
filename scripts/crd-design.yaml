@@ -1,0 +1,70 @@
+# Task 82: Simple CRD Design - WebsiteConfig custom resource
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: websiteconfigs.bootcamp.io
+  namespace: default
+spec:
+  group: bootcamp.io
+  names:
+    kind: WebsiteConfig
+    plural: websiteconfigs
+    singular: websiteconfig
+  scope: Namespaced
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          description: "WebsiteConfig defines a website configuration"
+          properties:
+            spec:
+              type: object
+              description: "WebsiteConfig specification"
+              required:
+                - domain
+                - replicas
+              properties:
+                # Required field: domain name
+                domain:
+                  type: string
+                  description: "Website domain (required)"
+                  minLength: 1
+                
+                # Required field: replica count
+                replicas:
+                  type: integer
+                  description: "Number of replicas (required, 1-10)"
+                  minimum: 1
+                  maximum: 10
+                
+                # Optional field: resource limits
+                resources:
+                  type: object
+                  description: "CPU/Memory limits (optional)"
+                  properties:
+                    cpu:
+                      type: string
+                      default: "100m"
+                    memory:
+                      type: string
+                      default: "128Mi"
+                
+                # Optional field: TLS config
+                tlsEnabled:
+                  type: boolean
+                  description: "Enable TLS (optional)"
+                  default: false
+            
+            status:
+              type: object
+              description: "WebsiteConfig status"
+              properties:
+                available:
+                  type: boolean
+                replicas:
+                  type: integer
+                message:
+                  type: string
